@@ -59,7 +59,6 @@ from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
 load_dotenv()
@@ -71,9 +70,13 @@ embeddings = HuggingFaceEmbeddings(
 )
 
 prompt = ChatPromptTemplate.from_template("""
-You are a document assistant. Only answer questions based on the context provided.
-If the answer is not in the context, say I don't know based on the given document.
-Do not use outside knowledge. Do not generate code or answer unrelated questions.
+You are a document assistant. Answer questions based on the context provided.
+If the question is a follow up to the previous conversation, use the conversation history to understand what is being asked.
+If the answer is not in the context or history, say I don't know based on the given document.
+Do not use outside knowledge unrelated to the document. Do not generate code.
+
+Previous conversation:
+{history}
 
 Context:
 {context}
@@ -81,6 +84,8 @@ Context:
 Question:
 {question}
 """)
+
+conversation_store = {}
 
 LOADERS = {
     ".pdf":  PyPDFLoader,
@@ -104,7 +109,18 @@ def load_document(filepath):
     loader = LOADERS[ext](filepath)
     return loader.load()
 
-def ask_question(filepath, question):
+def format_history(session_id):
+    history = conversation_store.get(session_id, [])
+    if not history:
+        return "No previous conversation."
+    
+    formatted = ""
+    for turn in history:
+        formatted += f"User: {turn['question']}\n"
+        formatted += f"Assistant: {turn['answer']}\n\n"
+    return formatted
+
+def ask_question(filepath, question, session_id):
     docs = load_document(filepath)
 
     splitter = RecursiveCharacterTextSplitter(
@@ -116,11 +132,24 @@ def ask_question(filepath, question):
     vectorstore = Chroma.from_documents(chunks, embeddings)
     retriever = vectorstore.as_retriever()
 
-    chain = (
-        {"context": retriever, "question": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
+    history = format_history(session_id)
+    context_docs = retriever.invoke(question)
+    context = "\n\n".join([doc.page_content for doc in context_docs])
 
-    return chain.invoke(question)
+    chain = prompt | llm | StrOutputParser()
+
+    answer = chain.invoke({
+        "history": history,
+        "context": context,
+        "question": question
+    })
+
+    if session_id not in conversation_store:
+        conversation_store[session_id] = []
+
+    conversation_store[session_id].append({
+        "question": question,
+        "answer": answer
+    })
+
+    return answer
