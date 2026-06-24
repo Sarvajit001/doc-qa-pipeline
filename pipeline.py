@@ -47,10 +47,13 @@
 #     return response.choices[0].message.content
 
 
-
 import os
+import pandas as pd
 from dotenv import load_dotenv
 from langchain_community.document_loaders import TextLoader
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import Docx2txtLoader
+from langchain_community.document_loaders import DataFrameLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -79,9 +82,30 @@ Question:
 {question}
 """)
 
+LOADERS = {
+    ".pdf":  PyPDFLoader,
+    ".txt":  TextLoader,
+    ".docx": Docx2txtLoader,
+}
+
+def load_document(filepath):
+    ext = os.path.splitext(filepath)[1].lower()
+
+    if ext in [".xlsx", ".xls"]:
+        df = pd.read_excel(filepath)
+        df = df.astype(str)
+        df["combined"] = df.apply(lambda row: " | ".join(row.values), axis=1)
+        loader = DataFrameLoader(df, page_content_column="combined")
+        return loader.load()
+
+    if ext not in LOADERS:
+        raise ValueError(f"Unsupported file type: {ext}")
+
+    loader = LOADERS[ext](filepath)
+    return loader.load()
+
 def ask_question(filepath, question):
-    loader = TextLoader(filepath)
-    docs = loader.load()
+    docs = load_document(filepath)
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
