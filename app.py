@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from pipeline import ask_question, get_history, clear_session_history
+from agent import run_agent
 import uuid
 import os
 from dotenv import load_dotenv
@@ -41,6 +42,25 @@ def ask():
         "answer": answer,
         "file": filepath,
         "session_id": session_id
+    })
+
+
+@app.route("/agent", methods=["POST"])
+@require_api_key
+def agent_ask():
+    data = request.get_json()
+
+    if not data or "question" not in data:
+        return jsonify({"error": "Please provide a question"}), 400
+
+    question = data["question"]
+    filepath = data.get("filepath")
+
+    answer = run_agent(question, filepath=filepath)
+
+    return jsonify({
+        "question": question,
+        "answer": answer
     })
 
 

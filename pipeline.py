@@ -64,7 +64,8 @@ from langchain_core.output_parsers import StrOutputParser
 
 load_dotenv()
 
-llm = ChatGroq(model="llama-3.3-70b-versatile", max_tokens=1024)
+# llm = ChatGroq(model="llama-3.3-70b-versatile", max_tokens=1024)
+llm = ChatGroq(model="openai/gpt-oss-120b", max_tokens=1024)
 
 embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
