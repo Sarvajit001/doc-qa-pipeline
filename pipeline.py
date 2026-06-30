@@ -48,6 +48,7 @@
 
 
 import os
+import hashlib
 import pandas as pd
 from dotenv import load_dotenv
 from langchain_community.document_loaders import TextLoader
@@ -55,7 +56,8 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.document_loaders import Docx2txtLoader
 from langchain_community.document_loaders import DataFrameLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
+# from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
@@ -93,6 +95,9 @@ LOADERS = {
     ".docx": Docx2txtLoader,
 }
 
+VECTOR_DB_ROOT = "./chroma_db"
+
+
 def load_document(filepath):
     ext = os.path.splitext(filepath)[1].lower()
 
@@ -109,27 +114,64 @@ def load_document(filepath):
     loader = LOADERS[ext](filepath)
     return loader.load()
 
+
+def get_collection_name(filepath):
+    """
+    Creates a unique, safe folder name for this file.
+    Based on filename + last modified time, so if the file changes,
+    a new embedding gets created automatically instead of using a stale one.
+    """
+    abs_path = os.path.abspath(filepath)
+    last_modified = os.path.getmtime(abs_path)
+    fingerprint = f"{abs_path}-{last_modified}"
+    return hashlib.md5(fingerprint.encode()).hexdigest()
+
+
+def get_vectorstore(filepath):
+    collection_name = get_collection_name(filepath)
+    persist_path = os.path.join(VECTOR_DB_ROOT, collection_name)
+
+    if os.path.exists(persist_path):
+        # Already embedded before — just load it, no re-embedding
+        print(f"[CACHE HIT] Loading existing vector store for {filepath}")
+        vectorstore = Chroma(
+            persist_directory=persist_path,
+            embedding_function=embeddings
+        )
+    else:
+        # First time seeing this file — embed it and save to disk
+        print(f"[CACHE MISS] Embedding {filepath} for the first time")
+        docs = load_document(filepath)
+
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=50
+        )
+        chunks = splitter.split_documents(docs)
+
+        vectorstore = Chroma.from_documents(
+            chunks,
+            embeddings,
+            persist_directory=persist_path
+        )
+
+    return vectorstore
+
+
 def format_history(session_id):
     history = conversation_store.get(session_id, [])
     if not history:
         return "No previous conversation."
-    
+
     formatted = ""
     for turn in history:
         formatted += f"User: {turn['question']}\n"
         formatted += f"Assistant: {turn['answer']}\n\n"
     return formatted
 
+
 def ask_question(filepath, question, session_id):
-    docs = load_document(filepath)
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50
-    )
-    chunks = splitter.split_documents(docs)
-
-    vectorstore = Chroma.from_documents(chunks, embeddings)
+    vectorstore = get_vectorstore(filepath)
     retriever = vectorstore.as_retriever()
 
     history = format_history(session_id)
