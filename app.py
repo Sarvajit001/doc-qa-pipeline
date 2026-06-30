@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from pipeline import ask_question
+from pipeline import ask_question, get_history, clear_session_history
 import uuid
 
 app = Flask(__name__)
@@ -25,16 +25,13 @@ def ask():
     })
 
 @app.route("/history/<session_id>", methods=["GET"])
-def get_history(session_id):
-    from pipeline import conversation_store
-    history = conversation_store.get(session_id, [])
+def get_history_route(session_id):
+    history = get_history(session_id)
     return jsonify({"session_id": session_id, "history": history})
 
 @app.route("/clear/<session_id>", methods=["DELETE"])
 def clear_history(session_id):
-    from pipeline import conversation_store
-    if session_id in conversation_store:
-        del conversation_store[session_id]
+    clear_session_history(session_id)
     return jsonify({"message": "History cleared", "session_id": session_id})
 
 if __name__ == "__main__":

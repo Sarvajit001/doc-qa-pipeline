@@ -6,3 +6,4 @@ chroma_db/
 hf_cache/
 .chroma/
 chroma_db/
+conversations.db

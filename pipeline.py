@@ -46,9 +46,9 @@
 
 #     return response.choices[0].message.content
 
-
 import os
 import hashlib
+import sqlite3
 import pandas as pd
 from dotenv import load_dotenv
 from langchain_community.document_loaders import TextLoader
@@ -56,7 +56,6 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.document_loaders import Docx2txtLoader
 from langchain_community.document_loaders import DataFrameLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-# from langchain_community.vectorstores import Chroma
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
@@ -87,8 +86,6 @@ Question:
 {question}
 """)
 
-conversation_store = {}
-
 LOADERS = {
     ".pdf":  PyPDFLoader,
     ".txt":  TextLoader,
@@ -96,6 +93,58 @@ LOADERS = {
 }
 
 VECTOR_DB_ROOT = "./chroma_db"
+DB_PATH = "./conversations.db"
+
+
+def init_db():
+    """Creates the conversations table if it doesn't exist yet. Runs once at startup."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            question TEXT NOT NULL,
+            answer TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
+
+def save_turn(session_id, question, answer):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO conversations (session_id, question, answer) VALUES (?, ?, ?)",
+        (session_id, question, answer)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_history(session_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT question, answer FROM conversations WHERE session_id = ? ORDER BY id ASC",
+        (session_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"question": q, "answer": a} for q, a in rows]
+
+
+def clear_session_history(session_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM conversations WHERE session_id = ?", (session_id,))
+    conn.commit()
+    conn.close()
 
 
 def load_document(filepath):
@@ -116,11 +165,6 @@ def load_document(filepath):
 
 
 def get_collection_name(filepath):
-    """
-    Creates a unique, safe folder name for this file.
-    Based on filename + last modified time, so if the file changes,
-    a new embedding gets created automatically instead of using a stale one.
-    """
     abs_path = os.path.abspath(filepath)
     last_modified = os.path.getmtime(abs_path)
     fingerprint = f"{abs_path}-{last_modified}"
@@ -132,14 +176,12 @@ def get_vectorstore(filepath):
     persist_path = os.path.join(VECTOR_DB_ROOT, collection_name)
 
     if os.path.exists(persist_path):
-        # Already embedded before — just load it, no re-embedding
         print(f"[CACHE HIT] Loading existing vector store for {filepath}")
         vectorstore = Chroma(
             persist_directory=persist_path,
             embedding_function=embeddings
         )
     else:
-        # First time seeing this file — embed it and save to disk
         print(f"[CACHE MISS] Embedding {filepath} for the first time")
         docs = load_document(filepath)
 
@@ -159,7 +201,7 @@ def get_vectorstore(filepath):
 
 
 def format_history(session_id):
-    history = conversation_store.get(session_id, [])
+    history = get_history(session_id)
     if not history:
         return "No previous conversation."
 
@@ -186,12 +228,6 @@ def ask_question(filepath, question, session_id):
         "question": question
     })
 
-    if session_id not in conversation_store:
-        conversation_store[session_id] = []
-
-    conversation_store[session_id].append({
-        "question": question,
-        "answer": answer
-    })
+    save_turn(session_id, question, answer)
 
     return answer
