@@ -177,7 +177,9 @@ def get_vectorstore(filepath):
     persist_path = os.path.join(VECTOR_DB_ROOT, collection_name)
 
     if os.path.exists(persist_path):
-        print(f"[CACHE HIT] Loading existing vector store for {filepath}")
+        print(f"\n[CACHE HIT] Vector store already exists for: {filepath}")
+        print(f"[CACHE HIT] Loading from disk: {persist_path}")
+        print("[CACHE HIT] Skipping chunking and embedding — already done before")
         vectorstore = Chroma(
             persist_directory=persist_path,
             embedding_function=embeddings
@@ -185,18 +187,51 @@ def get_vectorstore(filepath):
     else:
         print(f"[CACHE MISS] Embedding {filepath} for the first time")
         docs = load_document(filepath)
+        print(f"\n[STEP 1 — DOCUMENT LOADED]")
+        print(f"  Total pages/sections loaded: {len(docs)}")
+        print(f"  Sample content preview: {docs[0].page_content[:200]}...")
 
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
             chunk_overlap=50
         )
         chunks = splitter.split_documents(docs)
+        print(f"\n[STEP 2 — CHUNKING DONE]")
+        print(f"  Total chunks created: {len(chunks)}")
+        print(f"  Chunk size: 500 chars | Overlap: 50 chars")
+
+        for i, chunk in enumerate(chunks[:3]):
+            print(f"\n  --- Chunk {i+1} ---")
+            print(f"  {chunk.page_content}")
+        if len(chunks) > 3:
+            print(f"\n  ... and {len(chunks) - 3} more chunks")
+
+        print(f"\n[STEP 3 — EMBEDDINGS]")
+        print(f"  Converting {len(chunks)} chunks to vectors using HuggingFace all-MiniLM-L6-v2...")
+        print(f"  Each chunk will become a vector of 384 numbers")
+
+        sample_vector = embeddings.embed_query(chunks[0].page_content)
+        print(f"\n  Sample — Chunk 1 text:")
+        print(f"  '{chunks[0].page_content[:100]}...'")
+        print(f"  Sample — Chunk 1 vector (first 10 of 384 numbers):")
+        print(f"  {sample_vector[:10]}")
+        print(f"  Total vector dimensions: {len(sample_vector)}")
+
+        print(f"\n[STEP 4 — STORING IN CHROMADB]")
+        print(f"  Saving all {len(chunks)} vectors + original texts to disk...")
+        print(f"  Storage path: {persist_path}")
 
         vectorstore = Chroma.from_documents(
             chunks,
             embeddings,
             persist_directory=persist_path
         )
+
+        print(f"\n[STEP 4 — CHROMADB STORED SUCCESSFULLY]")
+        print(f"  Each chunk saved with:")
+        print(f"  1. Vector (384 numbers) — for searching")
+        print(f"  2. Original text         — returned when matched")
+        print(f"  Folder created: {persist_path}")
 
     return vectorstore
 
@@ -218,8 +253,34 @@ def ask_question(filepath, question, session_id):
     retriever = vectorstore.as_retriever()
 
     history = format_history(session_id)
+
+    print(f"\n[STEP 5 — SEMANTIC SEARCH]")
+    print(f"  Question: '{question}'")
+    print(f"  Converting question to vector and searching ChromaDB...")
+
     context_docs = retriever.invoke(question)
+
+    print(f"\n[STEP 5 — TOP MATCHING CHUNKS FOUND]")
+    for i, doc in enumerate(context_docs):
+        print(f"\n  --- Matched Chunk {i+1} ---")
+        print(f"  {doc.page_content[:150]}...")
+
     context = "\n\n".join([doc.page_content for doc in context_docs])
+
+    print(f"\n[STEP 6 — FETCHING HISTORY FROM SQLITE]")
+    if history == "No previous conversation.":
+        print(f"  No previous history found for session: {session_id}")
+    else:
+        print(f"  History found for session: {session_id}")
+        print(f"  {history[:300]}...")
+
+    print(f"\n[STEP 7 — PROMPT ASSEMBLED]")
+    print(f"  Prompt contains:")
+    print(f"  1. Guardrail rules (system instructions)")
+    print(f"  2. History from SQLite")
+    print(f"  3. Context chunks from ChromaDB")
+    print(f"  4. User question")
+    print(f"  Sending to Groq API...")
 
     chain = prompt | llm | StrOutputParser()
 
@@ -229,6 +290,51 @@ def ask_question(filepath, question, session_id):
         "question": question
     })
 
+    print(f"\n[STEP 8 — LLM ANSWER GENERATED]")
+    print(f"  Answer: {answer[:200]}...")
+
+    print(f"\n[STEP 9 — SAVING TO SQLITE]")
     save_turn(session_id, question, answer)
+    print(f"  Saved to conversations.db")
+    print(f"  session_id: {session_id}")
+    print(f"  question: {question}")
+    print(f"  answer: {answer[:100]}...")
+
+    print(f"\n[STEP 10 — RETURNING JSON RESPONSE TO FLASK]")
 
     return answer
+
+
+def compare_vectordb_vs_llm(filepath, question):
+    vectorstore = get_vectorstore(filepath)
+    retriever = vectorstore.as_retriever()
+    context_docs = retriever.invoke(question)
+
+    print("\n" + "="*60)
+    print("QUESTION:", question)
+    print("="*60)
+
+    print("\n--- VECTOR DB RAW OUTPUT (without LLM) ---")
+    print("(This is raw chunks — user has to read and figure out answer themselves)")
+    print("-"*60)
+    for i, doc in enumerate(context_docs):
+        print(f"\nChunk {i+1}:")
+        print(doc.page_content)
+    print("-"*60)
+
+    print("\n--- LLM OUTPUT (with LLM) ---")
+    print("(This is what we actually return to user — clean human readable answer)")
+    print("-"*60)
+    context = "\n\n".join([doc.page_content for doc in context_docs])
+    chain = prompt | llm | StrOutputParser()
+    answer = chain.invoke({
+        "history": "No previous conversation.",
+        "context": context,
+        "question": question
+    })
+    print(answer)
+    print("-"*60)
+
+
+if __name__ == "__main__":
+    compare_vectordb_vs_llm("sample.txt", "explain more about ML?")    

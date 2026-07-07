@@ -9,7 +9,7 @@ from functools import wraps
 load_dotenv()
 
 app = Flask(__name__)
-
+app.config['JSON_AS_ASCII'] = False
 VALID_API_KEY = os.getenv("API_KEY")
 
 
@@ -35,14 +35,32 @@ def ask():
     filepath = data["filepath"]
     session_id = data.get("session_id", str(uuid.uuid4()))
 
-    answer = ask_question(filepath, question, session_id)
+    # Check if file exists before doing anything
+    if not os.path.exists(filepath):
+        return jsonify({
+            "error": f"File not found: '{filepath}'. Please check the filepath and try again."
+        }), 404
 
-    return jsonify({
-        "question": question,
-        "answer": answer,
-        "file": filepath,
-        "session_id": session_id
-    })
+    # Check if file format is supported
+    ext = os.path.splitext(filepath)[1].lower()
+    supported = [".txt", ".pdf", ".docx", ".xlsx", ".xls"]
+    if ext not in supported:
+        return jsonify({
+            "error": f"Unsupported file type: '{ext}'. Supported formats: txt, pdf, docx, xlsx"
+        }), 400
+
+    try:
+        answer = ask_question(filepath, question, session_id)
+        return jsonify({
+            "question": question,
+            "answer": answer,
+            "file": filepath,
+            "session_id": session_id
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Something went wrong: {str(e)}"
+        }), 500
 
 
 @app.route("/agent", methods=["POST"])
