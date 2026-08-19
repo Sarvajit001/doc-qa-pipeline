@@ -27,7 +27,6 @@ def require_api_key(f):
 @require_api_key
 def ask():
     data = request.get_json()
-
     if not data or "question" not in data or "filepath" not in data:
         return jsonify({"error": "Please provide question and filepath"}), 400
 
