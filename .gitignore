@@ -7,3 +7,4 @@ hf_cache/
 .chroma/
 chroma_db/
 conversations.db
+agent_conversations.db

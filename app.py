@@ -72,12 +72,14 @@ def agent_ask():
 
     question = data["question"]
     filepath = data.get("filepath")
+    session_id = data.get("session_id", str(uuid.uuid4()))
 
-    answer = run_agent(question, filepath=filepath)
+    answer = run_agent(question, filepath=filepath, session_id=session_id)
 
     return jsonify({
         "question": question,
-        "answer": answer
+        "answer": answer,
+        "session_id": session_id
     })
 
 
