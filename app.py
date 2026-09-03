@@ -5,12 +5,14 @@ import uuid
 import os
 from dotenv import load_dotenv
 from functools import wraps
-
+from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
 app.config['JSON_AS_ASCII'] = False
 VALID_API_KEY = os.getenv("API_KEY")
+
 
 
 def require_api_key(f):
