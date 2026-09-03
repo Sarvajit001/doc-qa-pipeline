@@ -1,17 +1,52 @@
+
+
+
+
 # Document Q&A Pipeline
 
-A production-style RAG (Retrieval Augmented Generation) pipeline built from scratch
-using Python, LangChain, and Flask. Supports multi-format documents, conversation
-memory, vector store persistence, API authentication, and a tool-calling agent.
+A production-style RAG (Retrieval Augmented Generation) application built with
+Python, LangChain, Flask, React, and modern LLM tooling.
+
+The application allows users to upload documents, ask questions using semantic
+search, maintain conversation history, and interact with a tool-calling agent
+that can search documents, perform calculations, and perform web searches.
+
+The project was intentionally built from scratch first and then rebuilt using
+frameworks to understand what the frameworks are actually abstracting.
 
 ---
 
 ## What it does
 
-Upload any document and ask questions about it. The system finds the most relevant
-sections using semantic search and generates accurate answers using an LLM.
-A separate agent endpoint adds tool-calling capabilities — dynamically choosing
-between document search and a calculator depending on what the question needs.
+### 1. RAG Mode
+
+The `/ask` endpoint:
+
+- Loads supported documents
+- Splits them into chunks
+- Generates embeddings locally
+- Stores embeddings in ChromaDB
+- Performs semantic similarity search
+- Sends retrieved context to the LLM
+- Maintains conversation history using SQLite
+- Supports follow-up questions using the same session
+
+### 2. Agent Mode
+
+The `/agent` endpoint uses a tool-calling LLM agent.
+
+Depending on the question, the agent can:
+
+- Search the uploaded document
+- Perform mathematical calculations
+- Search the web using Tavily
+- Answer directly when no tool is required
+- Use multiple tools for a single question
+
+Agent conversations are also persisted using SQLite and support session-based
+conversation history.
+
+
 
 ---
 
@@ -279,3 +314,83 @@ Sarvajit — built as a hands-on learning project to understand LLM pipelines,
 RAG, agents, and production considerations from scratch.
 
 GitHub: https://github.com/Sarvajit001/doc-qa-pipeline
+
+
+## Tech Stack
+
+### Backend
+
+- Python 3.10+
+- Flask REST API
+- LangChain
+- LangChain-Chroma
+- ChromaDB
+- HuggingFace Embeddings
+- `sentence-transformers/all-MiniLM-L6-v2`
+- Groq LLM API
+- `openai/gpt-oss-120b`
+- SQLite
+- Tavily Web Search
+- Flask-CORS
+
+
+### Frontend
+
+- React
+- Vite
+- Tailwind CSS
+- JavaScript
+
+---
+
+## Project Structure
+
+```text
+doc-qa/
+│
+├── app.py
+├── pipeline.py
+├── agent.py
+├── utils.py
+├── requirements.txt
+├── README.md
+├── .gitignore
+├── .env
+│
+├── chroma_db/
+│   └── persisted vector stores
+│
+├── conversations.db
+│   └── RAG conversation history
+│
+├── agent_conversation.db
+│   └── Agent conversation history
+│
+├── sample.txt
+├── sample.pdf
+├── sample.docx
+├── sample.xlsx
+│
+└── Frontend/
+    ├── package.json
+    ├── package-lock.json
+    ├── index.html
+    ├── vite.config.js
+    ├── tailwind.config.js
+    ├── postcss.config.js
+    ├── .env.example
+    │
+    └── src/
+        ├── App.jsx
+        ├── api.js
+        ├── index.css
+        ├── main.jsx
+        ├── utils.js
+        │
+        └── components/
+            ├── ChatPane.jsx
+            ├── Composer.jsx
+            ├── Header.jsx
+            ├── MessageBubble.jsx
+            ├── ModeToggle.jsx
+            └── Sidebar.jsx

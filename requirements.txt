@@ -191,3 +191,5 @@ xxhash==3.7.0
 yarl==1.24.2
 zstandard==0.25.0
 tavily-python
+flask-cors
+flask-cors==6.0.5
