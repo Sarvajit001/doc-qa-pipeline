@@ -8,3 +8,9 @@ hf_cache/
 chroma_db/
 conversations.db
 agent_conversation.db
+
+# Frontend dependencies
+node_modules/
+
+# Frontend build output
+dist/
