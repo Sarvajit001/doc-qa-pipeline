@@ -295,16 +295,27 @@ blank slate unless you write rules into it explicitly.
 - Redis for conversation store in high-traffic production scenarios
 - Proper user authentication with JWT for multi-user deployments
 
+
 ---
 
 ## Lessons learned
 
-- Guardrails are not global — each LLM call needs its own rules in its own prompt
-- Temperature matters for tool-calling — lower temperature = more consistent structured output
-- Model deprecations happen in production — always watch provider changelogs
-- Building from scratch before using a framework makes the framework make sense
-- Testing with varied, adversarial inputs (wrong file format, out-of-document questions,
-  code generation requests) reveals real gaps that happy-path testing misses
+
+- Guardrails are not global — every LLM call needs its own rules.
+- Lower temperature generally makes tool-calling behavior more consistent.
+- Model deprecations can affect production systems and should be monitored.
+- Building a RAG pipeline from scratch makes framework abstractions easier to
+understand.
+- Tool-calling agents require careful handling of structured tool inputs.
+- Closures can simplify tool interfaces by injecting request-specific context.
+- Conversation memory requires persistent storage and session management.
+- CORS becomes important when frontend and backend run on different origins.
+- A browser-based frontend changes how API authentication should be designed.
+- Testing varied and adversarial inputs reveals problems that happy-path
+testing does not.
+- Persistent vector stores avoid unnecessarily recomputing embeddings.
+- Separating RAG and Agent responsibilities makes the architecture easier to
+reason about.  
 
 ---
 
