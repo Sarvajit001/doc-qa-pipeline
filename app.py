@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from pipeline import ask_question, get_history, clear_session_history
-from agent import run_agent
+from agent import run_agent,get_conversation_history, clear_conversation_history
 import uuid
 import os
 from dotenv import load_dotenv
@@ -83,17 +83,37 @@ def agent_ask():
     })
 
 
+# @app.route("/history/<session_id>", methods=["GET"])
+# @require_api_key
+# def get_history_route(session_id):
+#     history = get_history(session_id)
+#     return jsonify({"session_id": session_id, "history": history})
+
 @app.route("/history/<session_id>", methods=["GET"])
 @require_api_key
 def get_history_route(session_id):
-    history = get_history(session_id)
-    return jsonify({"session_id": session_id, "history": history})
+    rag_turns = [
+        {"question": h["question"], "answer": h["answer"], "mode": "rag"}
+        for h in get_history(session_id)
+    ]
+    agent_turns = [
+        {"question": h["user_input"], "answer": h["agent_response"], "mode": "agent"}
+        for h in get_conversation_history(session_id)
+    ]
+    return jsonify({"session_id": session_id, "history": rag_turns + agent_turns})
 
+
+# @app.route("/clear/<session_id>", methods=["DELETE"])
+# @require_api_key
+# def clear_history(session_id):
+#     clear_session_history(session_id)
+#     return jsonify({"message": "History cleared", "session_id": session_id})
 
 @app.route("/clear/<session_id>", methods=["DELETE"])
 @require_api_key
 def clear_history(session_id):
     clear_session_history(session_id)
+    clear_conversation_history(session_id)
     return jsonify({"message": "History cleared", "session_id": session_id})
 
 

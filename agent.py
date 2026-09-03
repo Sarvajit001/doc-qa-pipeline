@@ -181,13 +181,20 @@ def run_agent(user_input: str, filepath: str = None,session_id: str = None, max_
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
     )
+    
+    # Rebuild prior turns as message history so the agent has memory of this session
+    messages = []
+    if session_id:
+        for turn in get_conversation_history(session_id):
+            messages.append({"role": "user", "content": turn["user_input"]})
+            messages.append({"role": "assistant", "content": turn["agent_response"]})
+    messages.append({"role": "user", "content": user_input})
+    print(f"[AGENT] session={session_id} history_turns={len(messages)-1}")
 
     last_error = None
     for attempt in range(max_retries + 1):
         try:
-            result = agent_executor.invoke({
-                "messages": [{"role": "user", "content": user_input}]
-            })
+            result = agent_executor.invoke({"messages": messages})
             final_message = result["messages"][-1]
             log_conversation(session_id, user_input, final_message.content)
             print("saved to conversation log")
